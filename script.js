@@ -115,6 +115,75 @@
     let displayArtist = manualArtist;
     let musicPlayer;
     let playerReady = false;
+    const tonearm = $('.record-arm');
+    const recordDisc = $('.record-disc');
+    const turntable = $('.record-art');
+    let tonearmTimer = null;
+    let tonearmGeometry = null;
+    let tonearmProgress = 0;
+    let lastTonearmAngle = '';
+    const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+    const measureTonearm = () => {
+      if (!tonearm || !recordDisc || !recordDisc.offsetWidth || !tonearm.offsetHeight) return null;
+      // Both elements use the cabinet as offsetParent; avoid rotated bounding boxes.
+      const center = {x: recordDisc.offsetLeft + recordDisc.offsetWidth / 2, y: recordDisc.offsetTop + recordDisc.offsetHeight / 2};
+      const pivot = {x: tonearm.offsetLeft + tonearm.offsetWidth / 2, y: tonearm.offsetTop};
+      const distance = Math.hypot(center.x - pivot.x, center.y - pivot.y);
+      if (!distance) return null;
+      return {
+        distance, length: tonearm.offsetHeight,
+        bearing: Math.atan2(center.y - pivot.y, center.x - pivot.x),
+        outerRadius: recordDisc.offsetWidth * .5 * .90,
+        innerRadius: recordDisc.offsetWidth * .5 * .42
+      };
+    };
+    const positionTonearm = (progress) => {
+      tonearmProgress = clamp(Number.isFinite(progress) ? progress : 0, 0, 1);
+      if (!tonearm) return;
+      if (!tonearmGeometry) tonearmGeometry = measureTonearm();
+      if (!tonearmGeometry) return;
+      const {distance: d, length: length, bearing, outerRadius, innerRadius} = tonearmGeometry;
+      const radius = outerRadius + (innerRadius - outerRadius) * tonearmProgress;
+      // Circle intersection: |needle-center|=radius and |needle-pivot|=length.
+      const cosine = clamp((d * d + length * length - radius * radius) / (2 * d * length), -1, 1);
+      // Use the lower/right intersection. CSS 0deg points down, not along +x.
+      const angle = (bearing - Math.acos(cosine) - Math.PI / 2) * 180 / Math.PI;
+      const cssAngle = angle.toFixed(5) + 'deg';
+      if (cssAngle !== lastTonearmAngle) {
+        tonearm.style.setProperty('--tonearm-angle', cssAngle);
+        lastTonearmAngle = cssAngle;
+      }
+    };
+    const syncTonearm = (state) => {
+      if (!playerReady || !musicPlayer) return;
+      const duration = Number(musicPlayer.getDuration?.());
+      const currentTime = Number(musicPlayer.getCurrentTime?.());
+      const playerState = typeof state === 'number' ? state : musicPlayer.getPlayerState();
+      const progress = Number.isFinite(duration) && duration > 0 && Number.isFinite(currentTime)
+        ? playerState === 0 ? 1 : currentTime / duration : 0;
+      positionTonearm(progress);
+    };
+    const stopTonearmTracking = () => {
+      if (tonearmTimer !== null) { clearInterval(tonearmTimer); tonearmTimer = null; }
+    };
+    const startTonearmTracking = () => {
+      stopTonearmTracking();
+      if (!playerReady || !tonearm || document.hidden) return;
+      syncTonearm();
+      // Poll paused videos too: seeking while paused must also reposition the needle.
+      tonearmTimer = setInterval(syncTonearm, 250);
+    };
+    if (tonearm && recordDisc && turntable) {
+      const resizeTonearm = () => { tonearmGeometry = null; positionTonearm(tonearmProgress); };
+      resizeTonearm();
+      if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resizeTonearm).observe(turntable);
+      else window.addEventListener('resize', resizeTonearm);
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) stopTonearmTracking(); else startTonearmTracking();
+      });
+      window.addEventListener('pagehide', stopTonearmTracking);
+      window.addEventListener('pageshow', startTonearmTracking);
+    }
     const refreshMusicText = () => {
       if (heading) heading.textContent = displayName;
       if (artistLine) { artistLine.textContent = displayArtist; artistLine.hidden = !displayArtist; }
@@ -178,11 +247,13 @@
       musicCard.classList.toggle('is-playing', playing);
       musicButton.setAttribute('aria-pressed', String(active));
       refreshMusicText();
+      syncTonearm(state);
       musicLabel.textContent = active ? 'Pausar' : 'Tocar';
       musicIcon.textContent = active ? 'Ⅱ' : '▶';
       musicStatus.textContent = playing ? 'Tocando agora.' : state === 3 ? 'Carregando a faixa…' : state === 0 ? 'Quer ouvir de novo?' : state === 2 ? 'Pausado.' : 'Dê o play para ouvir.';
     };
     const unavailable = () => {
+      stopTonearmTracking();
       playerReady = false;
       musicCard.classList.remove('is-playing');
       musicButton.disabled = true;
@@ -205,6 +276,7 @@
             playerReady = true;
             musicButton.disabled = false;
             updateMusicState(event.target.getPlayerState());
+            startTonearmTracking();
           },
           onStateChange: (event) => updateMusicState(event.data),
           onAutoplayBlocked: () => {
