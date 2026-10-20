@@ -82,4 +82,76 @@
   });
   if ($('#github-contact') && safeWebUrl(data.github)) { $('#github-contact').href = safeWebUrl(data.github); $('#github-contact').hidden = false; }
   if ($('#resume-link') && data.resume && (safeWebUrl(data.resume) || /^\.\/assets\/[\w./-]+\.pdf$/i.test(data.resume))) { $('#resume-link').href = data.resume; $('#resume-link').hidden = false; }
+
+  // The YouTube API is loaded only on the page that contains this player.
+  const musicFrame = $('#atlas-player');
+  if (musicFrame) {
+    const musicCard = $('#music-card');
+    const musicButton = $('#music-toggle');
+    const musicLabel = $('#music-toggle-label');
+    const musicIcon = $('#music-toggle-icon');
+    const musicStatus = $('#music-status');
+    let musicPlayer;
+    let playerReady = false;
+    const updateMusicState = (state) => {
+      const playing = state === 1;
+      const active = playing || state === 3;
+      musicCard.classList.toggle('is-playing', playing);
+      musicButton.setAttribute('aria-pressed', String(active));
+      musicButton.setAttribute('aria-label', active ? 'Pausar Atlas, de Coldplay' : 'Tocar Atlas, de Coldplay');
+      musicLabel.textContent = active ? 'Pausar' : 'Tocar';
+      musicIcon.textContent = active ? 'Ⅱ' : '▶';
+      musicStatus.textContent = playing ? 'Tocando agora.' : state === 3 ? 'Carregando a faixa…' : state === 0 ? 'Quer ouvir de novo?' : state === 2 ? 'Pausado.' : 'Dê o play para ouvir.';
+    };
+    const unavailable = () => {
+      playerReady = false;
+      musicCard.classList.remove('is-playing');
+      musicButton.disabled = true;
+      musicButton.setAttribute('aria-pressed', 'false');
+      musicLabel.textContent = 'Indisponível';
+      musicIcon.textContent = '▶';
+      musicStatus.textContent = 'Você também pode ouvir no YouTube.';
+    };
+    musicButton.addEventListener('click', () => {
+      if (!playerReady) return;
+      const state = musicPlayer.getPlayerState();
+      if (state === 1 || state === 3) musicPlayer.pauseVideo();
+      else musicPlayer.playVideo();
+    });
+    if (['http:', 'https:'].includes(window.location.protocol)) {
+      const embedUrl = new URL(musicFrame.src);
+      embedUrl.searchParams.set('origin', window.location.origin);
+      musicFrame.src = embedUrl.href;
+    }
+    const initializeMusic = () => {
+      if (musicPlayer) return;
+      musicPlayer = new window.YT.Player('atlas-player', {
+        events: {
+          onReady: (event) => {
+            playerReady = true;
+            musicButton.disabled = false;
+            updateMusicState(event.target.getPlayerState());
+          },
+          onStateChange: (event) => updateMusicState(event.data),
+          onAutoplayBlocked: () => {
+            updateMusicState(-1);
+            musicStatus.textContent = 'Dê o play para ouvir.';
+          },
+          onError: unavailable
+        }
+      });
+    };
+    if (window.YT && typeof window.YT.Player === 'function') initializeMusic();
+    else {
+      const previousReady = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (typeof previousReady === 'function') previousReady();
+        initializeMusic();
+      };
+      const apiScript = document.createElement('script');
+      apiScript.src = 'https://www.youtube.com/iframe_api';
+      apiScript.onerror = unavailable;
+      document.head.append(apiScript);
+    }
+  }
 })();
