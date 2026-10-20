@@ -9,8 +9,8 @@ window.PORTFOLIO = {
   ],
   music: {
     url: "https://www.youtube.com/watch?v=Lh3TokLzzmw",
-    name: "", // Opcional: vazio busca automaticamente o título do vídeo.
-    artist: "" // Opcional: vazio usa o canal quando o título é buscado.
+    name: "Atlas", // Opcional: vazio busca automaticamente o título do vídeo.
+    artist: "Coldplay" // Opcional: vazio usa o canal quando o título é buscado.
   },
   projects: [
     {id:"cartomante",number:"01",category:"generative",categoryLabel:"LLMs / RAG",title:"A Cartomante RAG",motif:"books",theme:"lavender",description:"Inteligência documental sobre Machado de Assis: preparação do acervo, busca com reranking e respostas conectadas às evidências dos textos.",tags:["FastAPI","LangGraph","RAG"],codeUrl:"https://github.com/Gusreis7/ACartomanteRAG",demoUrl:"https://acartomanterag.gustavodreis.dev.br"},
