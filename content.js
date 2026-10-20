@@ -1,6 +1,17 @@
-/* Conteúdo público conferido em 20/10/2026. Nenhuma consulta a APIs durante a visita. */
+/* Conteúdo do portfólio. Música sem name consulta o título público do YouTube. */
 window.PORTFOLIO = {
   github: "https://github.com/Gusreis7", resume: "",
+  // Leituras exibidas na ordem da lista (no máximo três). Autor é opcional.
+  topBooks: [
+    { title: "Frankenstein", author: "Mary Shelley" },
+    { title: "O Santo Que Não Acreditava em Deus", author: "João Ubaldo Ribeiro" },
+    { title: "Vidas Secas", author: "Graciliano Ramos" }
+  ],
+  music: {
+    url: "https://www.youtube.com/watch?v=Lh3TokLzzmw",
+    name: "", // Opcional: vazio busca automaticamente o título do vídeo.
+    artist: "" // Opcional: vazio usa o canal quando o título é buscado.
+  },
   projects: [
     {id:"cartomante",number:"01",category:"generative",categoryLabel:"LLMs / RAG",title:"A Cartomante RAG",motif:"books",theme:"lavender",description:"Inteligência documental sobre Machado de Assis: preparação do acervo, busca com reranking e respostas conectadas às evidências dos textos.",tags:["FastAPI","LangGraph","RAG"],codeUrl:"https://github.com/Gusreis7/ACartomanteRAG",demoUrl:"https://acartomanterag.gustavodreis.dev.br"},
     {id:"deepfake",number:"02",category:"audio",categoryLabel:"ÁUDIO / DEEPFAKE",title:"Detecção de deepfake em áudio",motif:"audio",theme:"blue",description:"Código da competição de Processamento de Áudio e Voz: classificação de fala real e sintética com modelos clássicos, CNNs e fine-tuning de Wav2vec 2.0.",tags:["Wav2vec 2.0","CNN","Data augmentation"],codeUrl:"https://github.com/Gusreis7/DEEPFAKE-COMPTETITION-PAV",demoUrl:""},

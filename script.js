@@ -83,6 +83,19 @@
   if ($('#github-contact') && safeWebUrl(data.github)) { $('#github-contact').href = safeWebUrl(data.github); $('#github-contact').hidden = false; }
   if ($('#resume-link') && data.resume && (safeWebUrl(data.resume) || /^\.\/assets\/[\w./-]+\.pdf$/i.test(data.resume))) { $('#resume-link').href = data.resume; $('#resume-link').hidden = false; }
 
+  const bookList = $('.book-list');
+  if (bookList && Array.isArray(data.topBooks)) {
+    const books = data.topBooks.map(book => typeof book === 'string' ? {title: book} : book)
+      .filter(book => book && typeof book.title === 'string' && book.title.trim()).slice(0, 3);
+    bookList.replaceChildren(...books.map((book, index) => {
+      const row = el('li'); const body = el('div');
+      body.append(el('h3', '', book.title.trim()));
+      if (typeof book.author === 'string' && book.author.trim()) body.append(el('p', '', book.author.trim()));
+      row.append(el('span', 'book-rank', String(index + 1).padStart(2, '0')), body); return row;
+    }));
+    if ($('.reading-card')) $('.reading-card').hidden = books.length === 0;
+  }
+
   // The YouTube API is loaded only on the page that contains this player.
   const musicFrame = $('#atlas-player');
   if (musicFrame) {
@@ -91,14 +104,80 @@
     const musicLabel = $('#music-toggle-label');
     const musicIcon = $('#music-toggle-icon');
     const musicStatus = $('#music-status');
+    const music = data.music || {};
+    const heading = $('.music-heading h2');
+    const artistLine = $('.music-artist');
+    const discLabel = $('.record-disc > span');
+    const external = $('.music-external');
+    const manualName = typeof music.name === 'string' ? music.name.trim() : '';
+    const manualArtist = typeof music.artist === 'string' ? music.artist.trim() : '';
+    let displayName = manualName || 'Música do momento';
+    let displayArtist = manualArtist;
     let musicPlayer;
     let playerReady = false;
+    const refreshMusicText = () => {
+      if (heading) heading.textContent = displayName;
+      if (artistLine) { artistLine.textContent = displayArtist; artistLine.hidden = !displayArtist; }
+      if (discLabel) {
+        discLabel.textContent = Array.from(displayName.toLocaleUpperCase('pt-BR')).slice(0, 6).join('');
+        discLabel.title = displayName; discLabel.style.fontSize = '7px';
+      }
+      musicFrame.title = displayName + (displayArtist ? ' — ' + displayArtist : '') + ', player do YouTube';
+      const active = musicButton.getAttribute('aria-pressed') === 'true';
+      musicButton.setAttribute('aria-label', (active ? 'Pausar ' : 'Tocar ') + displayName + (displayArtist ? ', ' + displayArtist : ''));
+    };
+    const youtubeVideoId = (value) => {
+      if (typeof value !== 'string' || !value.trim()) return null;
+      try {
+        const raw = value.trim();
+        const url = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw);
+        if (!['https:', 'http:'].includes(url.protocol)) return null;
+        const host = url.hostname.toLowerCase();
+        const parts = url.pathname.split('/').filter(Boolean);
+        let id;
+        if (['youtu.be', 'www.youtu.be'].includes(host)) id = parts[0];
+        else if (['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com'].includes(host)) {
+          id = ['embed', 'shorts', 'live'].includes(parts[0]) ? parts[1] : url.searchParams.get('v');
+        }
+        return typeof id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+      } catch { return null; }
+    };
+    const videoId = youtubeVideoId(music.url);
+    refreshMusicText();
+    if (!videoId) {
+      musicFrame.removeAttribute('src');
+      musicButton.disabled = true;
+      musicLabel.textContent = 'Indisponível';
+      musicStatus.textContent = 'Nenhuma faixa disponível no momento.';
+      if (external) external.hidden = true;
+      return;
+    }
+    const canonicalUrl = 'https://www.youtube.com/watch?v=' + videoId;
+    if (external) { external.href = canonicalUrl; external.hidden = false; }
+    const embedUrl = new URL('https://www.youtube-nocookie.com/embed/' + videoId);
+    for (const [key, value] of Object.entries({enablejsapi: '1', autoplay: '1', playsinline: '1', rel: '0'})) embedUrl.searchParams.set(key, value);
+    if (['http:', 'https:'].includes(window.location.protocol)) embedUrl.searchParams.set('origin', window.location.origin);
+    musicFrame.src = embedUrl.href;
+    if (!manualName) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7000);
+      const metadataUrl = 'https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent(canonicalUrl);
+      fetch(metadataUrl, {signal: controller.signal, credentials: 'omit'})
+        .then(response => { if (!response.ok) throw new Error('Metadata unavailable'); return response.json(); })
+        .then(metadata => {
+          if (typeof metadata.title === 'string' && metadata.title.trim()) displayName = metadata.title.trim();
+          if (!manualArtist && typeof metadata.author_name === 'string') displayArtist = metadata.author_name.trim();
+          refreshMusicText();
+        })
+        .catch(() => { /* Keep the playable video and neutral title on network errors. */ })
+        .finally(() => clearTimeout(timeout));
+    }
     const updateMusicState = (state) => {
       const playing = state === 1;
       const active = playing || state === 3;
       musicCard.classList.toggle('is-playing', playing);
       musicButton.setAttribute('aria-pressed', String(active));
-      musicButton.setAttribute('aria-label', active ? 'Pausar Atlas, de Coldplay' : 'Tocar Atlas, de Coldplay');
+      refreshMusicText();
       musicLabel.textContent = active ? 'Pausar' : 'Tocar';
       musicIcon.textContent = active ? 'Ⅱ' : '▶';
       musicStatus.textContent = playing ? 'Tocando agora.' : state === 3 ? 'Carregando a faixa…' : state === 0 ? 'Quer ouvir de novo?' : state === 2 ? 'Pausado.' : 'Dê o play para ouvir.';
@@ -118,11 +197,6 @@
       if (state === 1 || state === 3) musicPlayer.pauseVideo();
       else musicPlayer.playVideo();
     });
-    if (['http:', 'https:'].includes(window.location.protocol)) {
-      const embedUrl = new URL(musicFrame.src);
-      embedUrl.searchParams.set('origin', window.location.origin);
-      musicFrame.src = embedUrl.href;
-    }
     const initializeMusic = () => {
       if (musicPlayer) return;
       musicPlayer = new window.YT.Player('atlas-player', {
